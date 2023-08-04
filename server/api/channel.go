@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 )
 
 type Channel struct {
@@ -31,19 +32,6 @@ var channels = []Channel{
 	},
 }
 
-// Обарботка запросов по каналам
-func workChannels(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("workChannels")
-	if r.Method == http.MethodGet {
-		getAllChannels(w, r)
-	} else if r.Method == http.MethodPost {
-		addNewChannel(w, r)
-	} else {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-
-}
-
 // Возвращает список каналов
 func getAllChannels(w http.ResponseWriter, r *http.Request) {
 	jsChannels, err := json.Marshal(channels)
@@ -60,6 +48,7 @@ func getAllChannels(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Success get Channels!")
 }
 
+// Добавление нового канала, присваивает каналу id
 func addNewChannel(w http.ResponseWriter, r *http.Request) {
 	// Прочитать тело запроса
 	body, err := ioutil.ReadAll(r.Body)
@@ -95,13 +84,32 @@ func addNewChannel(w http.ResponseWriter, r *http.Request) {
 	// Отправляем данные в ответ на запрос
 	w.Write(jsChannel)
 	channels = append(channels, newChannel)
-	fmt.Println("newChannel:", newChannel)
-	//fmt.Fprintf(w, "Структура Channel успешно сохранена: %+v", newChannel)
+	fmt.Println("Added new Channel:", newChannel)
+}
 
+func deleteChannel(w http.ResponseWriter, r *http.Request) {
+	// Извлекаем значение переменной из URL-пути по ключу "id".
+	vars := mux.Vars(r)
+	userID := vars["id"]
+
+	for i, channel := range channels {
+		if channel.Id == userID {
+			channels = append(channels[:i], channels[i+1:]...)
+			w.WriteHeader(http.StatusOK)
+			w.Write(nil)
+			return
+		}
+	}
+	http.Error(w, "Канал не найден", http.StatusBadRequest)
 }
 
 func StartServer() {
-	http.HandleFunc("/channels", workChannels)
+	r := mux.NewRouter()
+	r.HandleFunc("/channels", getAllChannels).Methods("Get")
+	r.HandleFunc("/channels", addNewChannel).Methods("Post")
+	r.HandleFunc("/channels/{id}", deleteChannel).Methods("Delete")
+
+	http.Handle("/", r)
 	err := http.ListenAndServe(":8080", nil) // устанавливаем порт веб-сервера
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
