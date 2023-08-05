@@ -13,11 +13,11 @@ import (
 )
 
 type Channel struct {
-	Id           string `json:"id"`
-	Name         string `json:"name"`
-	LogoURL      string `json:"logoURL"`
-	LastMessage  string `json:"lastMessage,omitempty"`
-	LastActivity string `json:"lastActivity,omitempty"`
+	Id           string     `json:"id"`
+	Name         string     `json:"name"`
+	LogoURL      string     `json:"logoURL"`
+	LastMessage  *string    `json:"lastMessage,omitempty"`
+	LastActivity *time.Time `json:"lastActivity,omitempty"`
 }
 
 type Message struct {
@@ -30,18 +30,7 @@ type Message struct {
 
 var messageDict = make(map[string][]Message)
 
-var channels = []Channel{
-	{
-		Id:      "channel1",
-		Name:    "Channel One",
-		LogoURL: "https://images.dog.ceo/breeds/entlebucher/n02108000_2212.jpg",
-	},
-	{
-		Id:      "channel2",
-		Name:    "Channel Two",
-		LogoURL: "https://images.dog.ceo/breeds/pyrenees/n02111500_124.jpg",
-	},
-}
+var channels = []Channel{}
 
 // Возвращает список каналов
 func getAllChannels(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +44,6 @@ func getAllChannels(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	w.Write(jsChannels)
-	fmt.Println("Success get Channels!")
 }
 
 // Добавление нового канала, присваивает каналу id
@@ -96,12 +84,13 @@ func sendChannel(channel Channel, w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	w.Write(jsChannel)
+	fmt.Println(string(jsChannel))
 }
 
 // Удаление канала по id
 func deleteChannel(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	channelID := vars["id"]
+	channelID := vars["channelID"]
 
 	for i, channel := range channels {
 		if channel.Id == channelID {
@@ -117,7 +106,7 @@ func deleteChannel(w http.ResponseWriter, r *http.Request) {
 // Возвращает канал по id канала
 func getChannel(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	channelID := vars["id"]
+	channelID := vars["channelID"]
 
 	for _, channel := range channels {
 		if channel.Id == channelID {
@@ -131,7 +120,7 @@ func getChannel(w http.ResponseWriter, r *http.Request) {
 // Отправляем сообщения канала
 func getMessagesChannel(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	channelID := vars["id"]
+	channelID := vars["channelID"]
 
 	messages := messageDict[channelID]
 
@@ -144,16 +133,62 @@ func getMessagesChannel(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	w.Write(jsMessages)
+}
 
+// Получение нового сообщения в канал
+func messageChannel(w http.ResponseWriter, r *http.Request) {
+	// Прочитать тело запроса
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Ошибка при чтении запроса", http.StatusInternalServerError)
+		return
+	}
+
+	vars := mux.Vars(r)
+	channelID := vars["channelID"]
+
+	var newMessage Message
+
+	// Декодировать JSON в структуру Channel
+	err = json.Unmarshal(body, &newMessage)
+	if err != nil {
+		http.Error(w, "Ошибка при демаршалинге JSON", http.StatusBadRequest)
+		return
+	}
+
+	newMessage.ID = channelID
+	newMessage.Date = time.Now()
+
+	jsMessage, err := json.Marshal(newMessage)
+	if err != nil {
+		log.Fatalln("unable marshal to json")
+	}
+
+	messageDict[channelID] = append(messageDict[channelID], newMessage)
+
+	for i, channel := range channels {
+		if channel.Id == channelID {
+			channels[i].LastActivity = &newMessage.Date
+			channels[i].LastMessage = &newMessage.Text
+			break
+		}
+	}
+
+	// Устанавливаем заголовки HTTP для JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	w.Write(jsMessage)
 }
 
 func StartServer() {
 	r := mux.NewRouter()
 	r.HandleFunc("/channels", getAllChannels).Methods("Get")
 	r.HandleFunc("/channels", addNewChannel).Methods("Post")
-	r.HandleFunc("/channels/{id}", deleteChannel).Methods("Delete")
-	r.HandleFunc("/channels/{id}", deleteChannel).Methods("Get")
-	r.HandleFunc("/channels/{id}/messages", deleteChannel).Methods("Get")
+	r.HandleFunc("/channels/{channelID}", deleteChannel).Methods("Delete")
+	r.HandleFunc("/channels/{channelID}", getChannel).Methods("Get")
+	r.HandleFunc("/channels/{channelID}/messages", getMessagesChannel).Methods("Get")
+	r.HandleFunc("/channels/{channelID}/messages", messageChannel).Methods("Post")
 
 	http.Handle("/", r)
 	err := http.ListenAndServe(":8080", nil) // устанавливаем порт веб-сервера
