@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -18,6 +19,16 @@ type Channel struct {
 	LastMessage  string `json:"lastMessage,omitempty"`
 	LastActivity string `json:"lastActivity,omitempty"`
 }
+
+type Message struct {
+	ID       string    `json:"id"`
+	Text     string    `json:"text"`
+	UserID   string    `json:"userID"`
+	UserName string    `json:"userName"`
+	Date     time.Time `json:"date"`
+}
+
+var messageDict = make(map[string][]Message)
 
 var channels = []Channel{
 	{
@@ -43,7 +54,6 @@ func getAllChannels(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	// Отправляем данные в ответ на запрос
 	w.Write(jsChannels)
 	fmt.Println("Success get Channels!")
 }
@@ -56,7 +66,7 @@ func addNewChannel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Ошибка при чтении запроса", http.StatusInternalServerError)
 		return
 	}
-	// Создать переменную для декодирования JSON
+
 	var newChannel Channel
 
 	// Декодировать JSON в структуру Channel
@@ -85,17 +95,16 @@ func sendChannel(channel Channel, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	// Отправляем данные в ответ на запрос
 	w.Write(jsChannel)
 }
 
+// Удаление канала по id
 func deleteChannel(w http.ResponseWriter, r *http.Request) {
-	// Извлекаем значение переменной из URL-пути по ключу "id".
 	vars := mux.Vars(r)
-	userID := vars["id"]
+	channelID := vars["id"]
 
 	for i, channel := range channels {
-		if channel.Id == userID {
+		if channel.Id == channelID {
 			channels = append(channels[:i], channels[i+1:]...)
 			w.WriteHeader(http.StatusOK)
 			w.Write(nil)
@@ -105,19 +114,37 @@ func deleteChannel(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Канал не найден", http.StatusBadRequest)
 }
 
-// Возвращает канад по id канала
+// Возвращает канал по id канала
 func getChannel(w http.ResponseWriter, r *http.Request) {
-	// Извлекаем значение переменной из URL-пути по ключу "id".
 	vars := mux.Vars(r)
-	userID := vars["id"]
+	channelID := vars["id"]
 
 	for _, channel := range channels {
-		if channel.Id == userID {
+		if channel.Id == channelID {
 			sendChannel(channel, w, r)
 			return
 		}
 	}
 	http.Error(w, "Канал не найден", http.StatusBadRequest)
+}
+
+// Отправляем сообщения канала
+func getMessagesChannel(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	channelID := vars["id"]
+
+	messages := messageDict[channelID]
+
+	jsMessages, err := json.Marshal(messages)
+	if err != nil {
+		log.Fatalln("unable marshal to json")
+	}
+	// Устанавливаем заголовки HTTP для JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	w.Write(jsMessages)
+
 }
 
 func StartServer() {
@@ -126,6 +153,7 @@ func StartServer() {
 	r.HandleFunc("/channels", addNewChannel).Methods("Post")
 	r.HandleFunc("/channels/{id}", deleteChannel).Methods("Delete")
 	r.HandleFunc("/channels/{id}", deleteChannel).Methods("Get")
+	r.HandleFunc("/channels/{id}/messages", deleteChannel).Methods("Get")
 
 	http.Handle("/", r)
 	err := http.ListenAndServe(":8080", nil) // устанавливаем порт веб-сервера
