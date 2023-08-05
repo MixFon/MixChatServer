@@ -71,10 +71,14 @@ func addNewChannel(w http.ResponseWriter, r *http.Request) {
 	// Например, можно добавить ее в существующий слайс или сохранить в базу данных.
 	id := uuid.New()
 	newChannel.Id = id.String()
+	channels = append(channels, newChannel)
+	sendChannel(newChannel, w, r)
+}
 
-	jsChannel, err := json.Marshal(newChannel)
+// Кодирование канала и его отправка в формате json
+func sendChannel(channel Channel, w http.ResponseWriter, r *http.Request) {
+	jsChannel, err := json.Marshal(channel)
 	if err != nil {
-		fmt.Println("Error get Channels")
 		log.Fatalln("unable marshal to json")
 	}
 	// Устанавливаем заголовки HTTP для JSON
@@ -83,8 +87,6 @@ func addNewChannel(w http.ResponseWriter, r *http.Request) {
 
 	// Отправляем данные в ответ на запрос
 	w.Write(jsChannel)
-	channels = append(channels, newChannel)
-	fmt.Println("Added new Channel:", newChannel)
 }
 
 func deleteChannel(w http.ResponseWriter, r *http.Request) {
@@ -103,11 +105,27 @@ func deleteChannel(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Канал не найден", http.StatusBadRequest)
 }
 
+// Возвращает канад по id канала
+func getChannel(w http.ResponseWriter, r *http.Request) {
+	// Извлекаем значение переменной из URL-пути по ключу "id".
+	vars := mux.Vars(r)
+	userID := vars["id"]
+
+	for _, channel := range channels {
+		if channel.Id == userID {
+			sendChannel(channel, w, r)
+			return
+		}
+	}
+	http.Error(w, "Канал не найден", http.StatusBadRequest)
+}
+
 func StartServer() {
 	r := mux.NewRouter()
 	r.HandleFunc("/channels", getAllChannels).Methods("Get")
 	r.HandleFunc("/channels", addNewChannel).Methods("Post")
 	r.HandleFunc("/channels/{id}", deleteChannel).Methods("Delete")
+	r.HandleFunc("/channels/{id}", deleteChannel).Methods("Get")
 
 	http.Handle("/", r)
 	err := http.ListenAndServe(":8080", nil) // устанавливаем порт веб-сервера
