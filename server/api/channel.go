@@ -6,34 +6,29 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"server/models"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 )
 
-type Channel struct {
-	Id           string     `json:"id"`
-	Name         string     `json:"name"`
-	LogoURL      string     `json:"logoURL"`
-	LastMessage  *string    `json:"lastMessage,omitempty"`
-	LastActivity *time.Time `json:"lastActivity,omitempty"`
+type Database interface {
+	StartDatabase() error
+	AddChannel(channel models.Channel) error
+	getChannels() ([]models.Channel, error)
 }
 
-type Message struct {
-	ID       string    `json:"id"`
-	Text     string    `json:"text"`
-	UserID   string    `json:"userID"`
-	UserName string    `json:"userName"`
-	Date     time.Time `json:"date"`
+type APIService struct {
+	database Database
 }
 
-var messageDict = make(map[string][]Message)
+var messageDict = make(map[string][]models.Message)
 
-var channels = []Channel{}
+var channels = []models.Channel{}
 
 // Возвращает список каналов
-func getAllChannels(w http.ResponseWriter, r *http.Request) {
+func (api APIService) getAllChannels(w http.ResponseWriter, r *http.Request) {
 	jsChannels, err := json.Marshal(channels)
 	if err != nil {
 		fmt.Println("Error get Channels")
@@ -55,7 +50,7 @@ func addNewChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var newChannel Channel
+	var newChannel models.Channel
 
 	// Декодировать JSON в структуру Channel
 	err = json.Unmarshal(body, &newChannel)
@@ -74,7 +69,7 @@ func addNewChannel(w http.ResponseWriter, r *http.Request) {
 }
 
 // Кодирование канала и его отправка в формате json
-func sendChannel(channel Channel, w http.ResponseWriter, r *http.Request) {
+func sendChannel(channel models.Channel, w http.ResponseWriter, r *http.Request) {
 	jsChannel, err := json.Marshal(channel)
 	if err != nil {
 		log.Fatalln("unable marshal to json")
@@ -147,7 +142,7 @@ func messageChannel(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	channelID := vars["channelID"]
 
-	var newMessage Message
+	var newMessage models.Message
 
 	// Декодировать JSON в структуру Channel
 	err = json.Unmarshal(body, &newMessage)
@@ -181,9 +176,10 @@ func messageChannel(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsMessage)
 }
 
-func StartServer() {
+func StartServer(database Database) {
 	r := mux.NewRouter()
-	r.HandleFunc("/channels", getAllChannels).Methods("Get")
+	api := APIService{database}
+	r.HandleFunc("/channels", api.getAllChannels).Methods("Get")
 	r.HandleFunc("/channels", addNewChannel).Methods("Post")
 	r.HandleFunc("/channels/{channelID}", deleteChannel).Methods("Delete")
 	r.HandleFunc("/channels/{channelID}", getChannel).Methods("Get")
