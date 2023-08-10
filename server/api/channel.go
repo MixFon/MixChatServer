@@ -16,7 +16,7 @@ import (
 type Database interface {
 	StartDatabase() error
 	AddChannel(channel models.Channel) error
-	getChannels() ([]models.Channel, error)
+	GetChannels() ([]models.Channel, error)
 }
 
 type APIService struct {
@@ -29,9 +29,15 @@ var channels = []models.Channel{}
 
 // Возвращает список каналов
 func (api APIService) getAllChannels(w http.ResponseWriter, r *http.Request) {
-	jsChannels, err := json.Marshal(channels)
+	dbChannels, err := api.database.GetChannels()
 	if err != nil {
 		fmt.Println("Error get Channels")
+		log.Fatalln("unable marshal to json")
+	}
+
+	jsChannels, err := json.Marshal(dbChannels)
+	if err != nil {
+		fmt.Println("Error Marshaling Channels")
 		log.Fatalln("unable marshal to json")
 	}
 	// Устанавливаем заголовки HTTP для JSON
@@ -42,7 +48,7 @@ func (api APIService) getAllChannels(w http.ResponseWriter, r *http.Request) {
 }
 
 // Добавление нового канала, присваивает каналу id
-func addNewChannel(w http.ResponseWriter, r *http.Request) {
+func (api APIService) addNewChannel(w http.ResponseWriter, r *http.Request) {
 	// Прочитать тело запроса
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -64,7 +70,13 @@ func addNewChannel(w http.ResponseWriter, r *http.Request) {
 	// Например, можно добавить ее в существующий слайс или сохранить в базу данных.
 	id := uuid.New()
 	newChannel.Id = id.String()
-	channels = append(channels, newChannel)
+	newChannel.LastActivity = nil
+	newChannel.LastMessage = nil
+	//channels = append(channels, newChannel)
+	if err = api.database.AddChannel(newChannel); err != nil {
+		http.Error(w, "Ошибка сохранения в базу данных", http.StatusBadRequest)
+		return
+	}
 	sendChannel(newChannel, w, r)
 }
 
@@ -180,7 +192,7 @@ func StartServer(database Database) {
 	r := mux.NewRouter()
 	api := APIService{database}
 	r.HandleFunc("/channels", api.getAllChannels).Methods("Get")
-	r.HandleFunc("/channels", addNewChannel).Methods("Post")
+	r.HandleFunc("/channels", api.addNewChannel).Methods("Post")
 	r.HandleFunc("/channels/{channelID}", deleteChannel).Methods("Delete")
 	r.HandleFunc("/channels/{channelID}", getChannel).Methods("Get")
 	r.HandleFunc("/channels/{channelID}/messages", getMessagesChannel).Methods("Get")

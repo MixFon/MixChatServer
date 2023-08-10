@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"server/models"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 
@@ -16,7 +17,7 @@ type DBService struct {
 	db *sql.DB
 }
 
-func (dbService DBService) StartDatabase() error {
+func (dbService *DBService) StartDatabase() error {
 	// Получаем свойства соединения.
 	cfg := mysql.Config{
 		User:   os.Getenv("DBUSER"),
@@ -42,15 +43,68 @@ func (dbService DBService) StartDatabase() error {
 	return nil
 }
 
-func (dbService DBService) AddChannel(channel models.Channel) error {
-	_, err := dbService.db.Exec("INSERT INTO channel (id, name, logoURL, lastMessage, lastActivity) VALUES (?, ?, ?, ?, ?)", channel.Id, channel.Name, channel.LastMessage, channel.LastActivity)
+func (dbService *DBService) AddChannel(channel models.Channel) error {
+	insertQuery := "INSERT INTO channel (id, name, logoURL) VALUES (?, ?, ?)"
+	_, err := dbService.db.Exec(insertQuery, channel.Id, channel.Name, channel.LogoURL)
 	if err != nil {
 		return fmt.Errorf("error add channel: %v", err)
 	}
 	return nil
 }
 
-func (dbService DBService) getChannels() ([]models.Channel, error) {
+func (dbService DBService) GetChannels() ([]models.Channel, error) {
+	// Выполнение запроса
+	rows, err := dbService.db.Query("select * from channel")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
 
-	return []models.Channel{}, nil
+	// Срез для хранения объектов Channel
+	var channels []models.Channel
+
+	// Перебор результатов запроса и создание объектов Channel
+	for rows.Next() {
+		var channel models.Channel
+		var lastMessage sql.NullString
+		var lastActivityStr sql.NullString
+
+		err := rows.Scan(&channel.Id, &channel.Name, &channel.LogoURL, &lastMessage, &lastActivityStr)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if lastMessage.Valid {
+			channel.LastMessage = &lastMessage.String
+		}
+
+		if lastActivityStr.Valid {
+			lastActivity, err := time.Parse("2006-01-02 15:04:05", lastActivityStr.String)
+			if err != nil {
+				log.Fatal(err)
+			}
+			channel.LastActivity = &lastActivity
+		}
+		channels = append(channels, channel)
+	}
+
+	// Проверка наличия ошибок после перебора результатов
+	if err := rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+
+	// Вывод полученных данных
+	for _, channel := range channels {
+		fmt.Printf("Channel ID: %s\n", channel.Id)
+		fmt.Printf("Name: %s\n", channel.Name)
+		fmt.Printf("Logo URL: %s\n", channel.LogoURL)
+		if channel.LastMessage != nil {
+			fmt.Printf("Last Message: %s\n", channel.LastMessage)
+		}
+		if channel.LastActivity != nil {
+			fmt.Printf("Last Activity: %s\n", channel.LastActivity.String())
+		}
+		fmt.Println("------------------------")
+	}
+	return channels, nil
 }

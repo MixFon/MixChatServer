@@ -14,5 +14,5 @@ func main() {
 	if db_err != nil {
 		log.Fatal("Error connect DB: ", db_err)
 	}
-	api.StartServer(db)
+	api.StartServer(&db)
 }
