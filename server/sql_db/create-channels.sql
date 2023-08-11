@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS channel;
 CREATE TABLE channel (
     id VARCHAR(255) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    logoURL VARCHAR(255) NOT NULL,
+    logoURL VARCHAR(255),
     lastMessage VARCHAR(255),
     lastActivity TIMESTAMP
 );

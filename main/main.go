@@ -1,18 +1,26 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"server/api"
+	"server/handler"
 	"server/sql_db"
 )
 
 func main() {
-	fmt.Println("Server start!")
 	db := sql_db.DBService{}
+
+	// Устанавливаем соединение с DB
 	db_err := db.StartDatabase()
 	if db_err != nil {
-		log.Fatal("Error connect DB: ", db_err)
+		log.Fatal(db_err)
 	}
-	api.StartServer(&db)
+	api := api.APIService{}
+	api.SetDatabase(&db)
+
+	// Запускам сервер
+	api_err := handler.StartServer(api)
+	if api_err != nil {
+		log.Fatal(api_err)
+	}
 }

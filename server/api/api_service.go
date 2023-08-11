@@ -13,42 +13,39 @@ import (
 	"github.com/gorilla/mux"
 )
 
-type Database interface {
+var messageDict = make(map[string][]models.Message)
+var channels = []models.Channel{}
+
+type DatabaseInterfase interface {
 	StartDatabase() error
 	AddChannel(channel models.Channel) error
 	GetChannels() ([]models.Channel, error)
 }
 
 type APIService struct {
-	database Database
+	database DatabaseInterfase
 }
 
-var messageDict = make(map[string][]models.Message)
-
-var channels = []models.Channel{}
+func (api *APIService) SetDatabase(database DatabaseInterfase) {
+	api.database = database
+}
 
 // Возвращает список каналов
-func (api APIService) getAllChannels(w http.ResponseWriter, r *http.Request) {
+func (api APIService) GetAllChannels(w http.ResponseWriter, r *http.Request) {
 	dbChannels, err := api.database.GetChannels()
 	if err != nil {
 		fmt.Println("Error get Channels")
 		log.Fatalln("unable marshal to json")
 	}
-
-	jsChannels, err := json.Marshal(dbChannels)
-	if err != nil {
-		fmt.Println("Error Marshaling Channels")
-		log.Fatalln("unable marshal to json")
+	if len(dbChannels) == 0 {
+		sendEmptySliceChannels(w, r)
+	} else {
+		sendSliceChannels(dbChannels, w, r)
 	}
-	// Устанавливаем заголовки HTTP для JSON
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	w.Write(jsChannels)
 }
 
 // Добавление нового канала, присваивает каналу id
-func (api APIService) addNewChannel(w http.ResponseWriter, r *http.Request) {
+func (api APIService) AddNewChannel(w http.ResponseWriter, r *http.Request) {
 	// Прочитать тело запроса
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -72,7 +69,6 @@ func (api APIService) addNewChannel(w http.ResponseWriter, r *http.Request) {
 	newChannel.Id = id.String()
 	newChannel.LastActivity = nil
 	newChannel.LastMessage = nil
-	//channels = append(channels, newChannel)
 	if err = api.database.AddChannel(newChannel); err != nil {
 		http.Error(w, "Ошибка сохранения в базу данных", http.StatusBadRequest)
 		return
@@ -80,22 +76,8 @@ func (api APIService) addNewChannel(w http.ResponseWriter, r *http.Request) {
 	sendChannel(newChannel, w, r)
 }
 
-// Кодирование канала и его отправка в формате json
-func sendChannel(channel models.Channel, w http.ResponseWriter, r *http.Request) {
-	jsChannel, err := json.Marshal(channel)
-	if err != nil {
-		log.Fatalln("unable marshal to json")
-	}
-	// Устанавливаем заголовки HTTP для JSON
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	w.Write(jsChannel)
-	fmt.Println(string(jsChannel))
-}
-
 // Удаление канала по id
-func deleteChannel(w http.ResponseWriter, r *http.Request) {
+func (api APIService) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	channelID := vars["channelID"]
 
@@ -111,7 +93,7 @@ func deleteChannel(w http.ResponseWriter, r *http.Request) {
 }
 
 // Возвращает канал по id канала
-func getChannel(w http.ResponseWriter, r *http.Request) {
+func (api APIService) GetChannel(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	channelID := vars["channelID"]
 
@@ -125,7 +107,7 @@ func getChannel(w http.ResponseWriter, r *http.Request) {
 }
 
 // Отправляем сообщения канала
-func getMessagesChannel(w http.ResponseWriter, r *http.Request) {
+func (api APIService) GetMessagesChannel(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	channelID := vars["channelID"]
 
@@ -143,7 +125,7 @@ func getMessagesChannel(w http.ResponseWriter, r *http.Request) {
 }
 
 // Получение нового сообщения в канал
-func messageChannel(w http.ResponseWriter, r *http.Request) {
+func (api APIService) MessageChannel(w http.ResponseWriter, r *http.Request) {
 	// Прочитать тело запроса
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -184,24 +166,49 @@ func messageChannel(w http.ResponseWriter, r *http.Request) {
 	// Устанавливаем заголовки HTTP для JSON
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-
 	w.Write(jsMessage)
 }
 
-func StartServer(database Database) {
-	r := mux.NewRouter()
-	api := APIService{database}
-	r.HandleFunc("/channels", api.getAllChannels).Methods("Get")
-	r.HandleFunc("/channels", api.addNewChannel).Methods("Post")
-	r.HandleFunc("/channels/{channelID}", deleteChannel).Methods("Delete")
-	r.HandleFunc("/channels/{channelID}", getChannel).Methods("Get")
-	r.HandleFunc("/channels/{channelID}/messages", getMessagesChannel).Methods("Get")
-	r.HandleFunc("/channels/{channelID}/messages", messageChannel).Methods("Post")
+/// Private
 
-	http.Handle("/", r)
-	err := http.ListenAndServe(":8080", nil) // устанавливаем порт веб-сервера
+// Кодирование канала и его отправка в формате json
+func sendChannel(channel models.Channel, w http.ResponseWriter, r *http.Request) {
+	jsChannel, err := json.Marshal(channel)
 	if err != nil {
-		log.Fatal("ListenAndServe: ", err)
+		log.Fatalln("unable marshal to json")
 	}
-	fmt.Println("Start server!")
+	// Устанавливаем заголовки HTTP для JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	w.Write(jsChannel)
+}
+
+// Отаравна слайса каналов
+func sendSliceChannels(channels []models.Channel, w http.ResponseWriter, r *http.Request) {
+	jsChannels, err := json.Marshal(channels)
+	if err != nil {
+		fmt.Println("Error Marshaling Channels")
+		log.Fatalln("unable marshal to json")
+	}
+	// Устанавливаем заголовки HTTP для JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	w.Write(jsChannels)
+}
+
+// Отправка пустого слайса каналов
+func sendEmptySliceChannels(w http.ResponseWriter, r *http.Request) {
+	emptyArray := []models.Channel{}
+
+	// Преобразуем массив в JSON
+	responseJSON, err := json.Marshal(emptyArray)
+	if err != nil {
+		http.Error(w, "Error encoding JSON", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(responseJSON)
 }

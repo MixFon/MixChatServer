@@ -5,7 +5,7 @@ import "time"
 type Channel struct {
 	Id           string     `json:"id"`
 	Name         string     `json:"name"`
-	LogoURL      string     `json:"logoURL"`
+	LogoURL      *string    `json:"logoURL,omitempty"`
 	LastMessage  *string    `json:"lastMessage,omitempty"`
 	LastActivity *time.Time `json:"lastActivity,omitempty"`
 }
