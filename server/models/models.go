@@ -1,6 +1,8 @@
 package models
 
-import "time"
+import (
+	"time"
+)
 
 type Channel struct {
 	Id           string     `json:"id"`

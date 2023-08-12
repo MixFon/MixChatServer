@@ -13,14 +13,14 @@ import (
 	"github.com/gorilla/mux"
 )
 
-var channels = []models.Channel{}
-
 type DatabaseInterfase interface {
 	StartDatabase() error
 	AddChannel(channel models.Channel) error
-	GetChannels() ([]models.Channel, error)
+	GetAllChannels() ([]models.Channel, error)
 	AddMessage(channelID string, message models.Message) error
 	GetAllMessages(channelID string) ([]models.Message, error)
+	DelegeChannel(channelID string) error
+	GetChannel(channelID string) (models.Channel, error)
 }
 
 type APIService struct {
@@ -33,7 +33,7 @@ func (api *APIService) SetDatabase(database DatabaseInterfase) {
 
 // Возвращает список каналов
 func (api APIService) GetAllChannels(w http.ResponseWriter, r *http.Request) {
-	dbChannels, err := api.database.GetChannels()
+	dbChannels, err := api.database.GetAllChannels()
 	if err != nil {
 		fmt.Println("Error get Channels")
 		log.Fatalln("unable marshal to json")
@@ -68,8 +68,8 @@ func (api APIService) AddNewChannel(w http.ResponseWriter, r *http.Request) {
 	// Например, можно добавить ее в существующий слайс или сохранить в базу данных.
 	id := uuid.New()
 	newChannel.Id = id.String()
-	newChannel.LastActivity = nil
 	newChannel.LastMessage = nil
+	newChannel.LastActivity = nil
 	if err = api.database.AddChannel(newChannel); err != nil {
 		http.Error(w, "Ошибка сохранения в базу данных", http.StatusBadRequest)
 		return
@@ -82,15 +82,13 @@ func (api APIService) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	channelID := vars["channelID"]
 
-	for i, channel := range channels {
-		if channel.Id == channelID {
-			channels = append(channels[:i], channels[i+1:]...)
-			w.WriteHeader(http.StatusOK)
-			w.Write(nil)
-			return
-		}
+	err := api.database.DelegeChannel(channelID)
+	if err != nil {
+		http.Error(w, "ошибка удаления канала", http.StatusBadRequest)
+		return
 	}
-	http.Error(w, "Канал не найден", http.StatusBadRequest)
+	w.WriteHeader(http.StatusOK)
+	w.Write(nil)
 }
 
 // Возвращает канал по id канала
@@ -98,13 +96,12 @@ func (api APIService) GetChannel(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	channelID := vars["channelID"]
 
-	for _, channel := range channels {
-		if channel.Id == channelID {
-			sendChannel(channel, w, r)
-			return
-		}
+	channel, err := api.database.GetChannel(channelID)
+	if err != nil {
+		http.Error(w, "Канал не найден", http.StatusBadRequest)
+		return
 	}
-	http.Error(w, "Канал не найден", http.StatusBadRequest)
+	sendChannel(channel, w, r)
 }
 
 // Отправляем сообщения канала
@@ -151,10 +148,24 @@ func (api APIService) MessageChannel(w http.ResponseWriter, r *http.Request) {
 
 	messageID := uuid.New().String()
 	newMessage.ID = messageID
-	newMessage.Date = time.Now()
+	currentTime := time.Now()
+
+	// Форматирование в стандарт ISO 8601
+	iso8601Format := "2006-01-02T15:04:05-07:00"
+	iso8601Time := currentTime.Format(iso8601Format)
+	fmt.Println("ISO 8601 формат:", iso8601Time)
+
+	parsedTime, err := time.Parse(iso8601Format, iso8601Time)
+	if err != nil {
+		fmt.Println("Ошибка при разборе времени:", err)
+		return
+	}
+
+	newMessage.Date = parsedTime
 
 	jsMessage, err := json.Marshal(newMessage)
 	if err != nil {
+		fmt.Println("Err %w", err)
 		log.Fatalln("unable marshal to json")
 	}
 
@@ -163,14 +174,7 @@ func (api APIService) MessageChannel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Ошибка добавления сообщеня в базу данных", http.StatusInternalServerError)
 		return
 	}
-
-	for i, channel := range channels {
-		if channel.Id == channelID {
-			channels[i].LastActivity = &newMessage.Date
-			channels[i].LastMessage = &newMessage.Text
-			break
-		}
-	}
+	fmt.Println(string(jsMessage))
 
 	// Устанавливаем заголовки HTTP для JSON
 	w.Header().Set("Content-Type", "application/json")
@@ -184,7 +188,8 @@ func (api APIService) MessageChannel(w http.ResponseWriter, r *http.Request) {
 func sendChannel(channel models.Channel, w http.ResponseWriter, r *http.Request) {
 	jsChannel, err := json.Marshal(channel)
 	if err != nil {
-		log.Fatalln("unable marshal to json")
+		fmt.Println("!!!Err %w", err)
+		log.Fatalln("unable marshal to json!!!!")
 	}
 	// Устанавливаем заголовки HTTP для JSON
 	w.Header().Set("Content-Type", "application/json")
