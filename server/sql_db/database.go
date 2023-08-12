@@ -3,6 +3,7 @@ package sql_db
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"server/models"
 	"time"
@@ -40,6 +41,7 @@ func (dbService *DBService) StartDatabase() error {
 	return nil
 }
 
+// Добавление канала channel
 func (dbService *DBService) AddChannel(channel models.Channel) error {
 	insertQuery := "INSERT INTO channel (id, name, logoURL) VALUES (?, ?, ?)"
 	_, err := dbService.db.Exec(insertQuery, channel.Id, channel.Name, channel.LogoURL)
@@ -49,6 +51,7 @@ func (dbService *DBService) AddChannel(channel models.Channel) error {
 	return nil
 }
 
+// Возврат всех каналов
 func (dbService DBService) GetChannels() ([]models.Channel, error) {
 	// Выполнение запроса
 	rows, err := dbService.db.Query("select * from channel")
@@ -91,6 +94,7 @@ func (dbService DBService) GetChannels() ([]models.Channel, error) {
 	}
 
 	// Вывод полученных данных
+	// TODO: Убрать
 	for _, channel := range channels {
 		fmt.Printf("Channel ID: %s\n", channel.Id)
 		fmt.Printf("Name: %s\n", channel.Name)
@@ -106,4 +110,66 @@ func (dbService DBService) GetChannels() ([]models.Channel, error) {
 		fmt.Println("------------------------")
 	}
 	return channels, nil
+}
+
+// Добавление сообщения по id канала
+func (dbService *DBService) AddMessage(channelID string, message models.Message) error {
+	// Подготовка SQL-запроса на вставку
+	insertQuery := "INSERT INTO message (id, text, userID, userName, date, channelID) VALUES (?, ?, ?, ?, ?, ?)"
+	_, err := dbService.db.Exec(insertQuery, message.ID, message.Text, message.UserID, message.UserName, message.Date, channelID)
+	if err != nil {
+		fmt.Printf("%s\n", err)
+		return fmt.Errorf("ошибка добавления сообщения в DB: %w", err)
+	}
+
+	fmt.Println("Message added successfully!")
+	return nil
+}
+
+// Возвращаем все сообщения по id канала
+func (dbService *DBService) GetAllMessages(channelID string) ([]models.Message, error) {
+	// SQL-запрос с JOIN для получения сообщений, принадлежащих каналу
+	query := `
+		SELECT m.id, m.text, m.userID, m.userName, m.date
+		FROM message m
+		INNER JOIN channel c ON m.channelID = c.id
+		WHERE c.id = ?
+	`
+	rows, err := dbService.db.Query(query, channelID)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	var messages []models.Message
+
+	// Перебор результатов запроса и создание объектов Message
+	for rows.Next() {
+		var date sql.NullString
+		var message models.Message
+		err := rows.Scan(&message.ID, &message.Text, &message.UserID, &message.UserName, &date)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if date.Valid {
+			lastActivity, err := time.Parse("2006-01-02 15:04:05", date.String)
+			if err != nil {
+				return nil, fmt.Errorf("ошибка парсинга строки времени: %w", err)
+			}
+			message.Date = lastActivity
+		}
+
+		messages = append(messages, message)
+	}
+
+	// Вывод полученных сообщений
+	for _, message := range messages {
+		fmt.Printf("Message ID: %s\n", message.ID)
+		fmt.Printf("Text: %s\n", message.Text)
+		fmt.Printf("User ID: %s\n", message.UserID)
+		fmt.Printf("User Name: %s\n", message.UserName)
+		fmt.Printf("Date: %s\n", message.Date.String())
+		fmt.Println("------------------------")
+	}
+	return messages, nil
 }

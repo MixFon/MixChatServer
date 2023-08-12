@@ -13,13 +13,14 @@ import (
 	"github.com/gorilla/mux"
 )
 
-var messageDict = make(map[string][]models.Message)
 var channels = []models.Channel{}
 
 type DatabaseInterfase interface {
 	StartDatabase() error
 	AddChannel(channel models.Channel) error
 	GetChannels() ([]models.Channel, error)
+	AddMessage(channelID string, message models.Message) error
+	GetAllMessages(channelID string) ([]models.Message, error)
 }
 
 type APIService struct {
@@ -111,7 +112,10 @@ func (api APIService) GetMessagesChannel(w http.ResponseWriter, r *http.Request)
 	vars := mux.Vars(r)
 	channelID := vars["channelID"]
 
-	messages := messageDict[channelID]
+	messages, err := api.database.GetAllMessages(channelID)
+	if err != nil {
+		log.Fatalln("unable marshal to json")
+	}
 
 	jsMessages, err := json.Marshal(messages)
 	if err != nil {
@@ -145,7 +149,8 @@ func (api APIService) MessageChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newMessage.ID = channelID
+	messageID := uuid.New().String()
+	newMessage.ID = messageID
 	newMessage.Date = time.Now()
 
 	jsMessage, err := json.Marshal(newMessage)
@@ -153,7 +158,11 @@ func (api APIService) MessageChannel(w http.ResponseWriter, r *http.Request) {
 		log.Fatalln("unable marshal to json")
 	}
 
-	messageDict[channelID] = append(messageDict[channelID], newMessage)
+	err = api.database.AddMessage(channelID, newMessage)
+	if err != nil {
+		http.Error(w, "Ошибка добавления сообщеня в базу данных", http.StatusInternalServerError)
+		return
+	}
 
 	for i, channel := range channels {
 		if channel.Id == channelID {
