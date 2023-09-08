@@ -14,6 +14,7 @@ type APIInterface interface {
 	GetChannel(w http.ResponseWriter, r *http.Request)
 	GetMessagesChannel(w http.ResponseWriter, r *http.Request)
 	MessageChannel(w http.ResponseWriter, r *http.Request)
+	CreateSSE(w http.ResponseWriter, r *http.Request)
 }
 
 func StartServer(api APIInterface) error {
@@ -24,6 +25,7 @@ func StartServer(api APIInterface) error {
 	r.HandleFunc("/channels/{channelID}", api.GetChannel).Methods("Get")
 	r.HandleFunc("/channels/{channelID}/messages", api.GetMessagesChannel).Methods("Get")
 	r.HandleFunc("/channels/{channelID}/messages", api.MessageChannel).Methods("Post")
+	r.HandleFunc("/sse", api.CreateSSE)
 
 	http.Handle("/", r)
 	fmt.Println("Start server!")

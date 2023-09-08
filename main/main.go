@@ -17,9 +17,10 @@ func main() {
 	}
 	api := api.APIService{}
 	api.SetDatabase(&db)
+	api.SetChannel(make(chan string))
 
 	// Запускам сервер
-	api_err := handler.StartServer(api)
+	api_err := handler.StartServer(&api)
 	if api_err != nil {
 		log.Fatal(api_err)
 	}

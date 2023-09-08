@@ -23,11 +23,16 @@ type DatabaseInterfase interface {
 }
 
 type APIService struct {
-	database DatabaseInterfase
+	database       DatabaseInterfase
+	messageChannel chan string
 }
 
 func (api *APIService) SetDatabase(database DatabaseInterfase) {
 	api.database = database
+}
+
+func (api *APIService) SetChannel(channel chan string) {
+	api.messageChannel = channel
 }
 
 // Возвращает список каналов
@@ -68,6 +73,7 @@ func (api APIService) AddNewChannel(w http.ResponseWriter, r *http.Request) {
 		sendError(err, w, r)
 		return
 	}
+	api.sseAddChannel(id.String())
 	sendChannel(newChannel, w, r)
 }
 
@@ -81,6 +87,7 @@ func (api APIService) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 		sendError(err, w, r)
 		return
 	}
+	api.sseDeleteChannel(channelID)
 	w.WriteHeader(http.StatusOK)
 	w.Write(nil)
 }
@@ -164,12 +171,65 @@ func (api APIService) MessageChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	api.sseUpdateChannel(channelID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsMessage)
 }
 
+func (api *APIService) CreateSSE(w http.ResponseWriter, r *http.Request) {
+	fmt.Println(": connected")
+	// Устанавливаем заголовки для SSE.
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	api.workResponse(w, r)
+	for {
+	}
+}
+
 /// Private
+
+func (api *APIService) workResponse(w http.ResponseWriter, r *http.Request) {
+	// Отправляем сообщения клиенту через SSE
+	go func() {
+		localW := w
+		fmt.Println("gorutine")
+		for {
+			message := <-api.messageChannel
+			fmt.Println(message)
+			fmt.Fprintf(localW, "data:%s\n", message)
+			localW.(http.Flusher).Flush()
+		}
+	}()
+}
+
+// Отправка события добавление канала
+func (api *APIService) sseAddChannel(id string) {
+	message := fmt.Sprintf(`{
+			"eventType": "add",
+			"resourceID": "%s"
+			}`, id)
+	api.messageChannel <- message
+}
+
+// Отправка события удаления канала
+func (api *APIService) sseDeleteChannel(id string) {
+	message := fmt.Sprintf(`{
+			"eventType": "delete",
+			"resourceID": "%s"
+			}`, id)
+	api.messageChannel <- message
+}
+
+// Отправка события обновления канала. В канале добавилось сообщение
+func (api *APIService) sseUpdateChannel(id string) {
+	message := fmt.Sprintf(`{
+			"eventType": "update",
+			"resourceID": "%s"
+			}`, id)
+	api.messageChannel <- message
+}
 
 // Кодирование канала и его отправка в формате json
 func sendChannel(channel models.Channel, w http.ResponseWriter, r *http.Request) {
