@@ -80,10 +80,10 @@ mysql> source create-channels.sql
 Проверить, что таблица создана
 ```mysql
 mysql> select * from channel;
-Empty set (0.01 sec)
+# Empty set (0.01 sec)
 
 mysql> select * from message;
-Empty set (0.00 sec)
+# Empty set (0.00 sec)
 ```
 
 Файл описывающий создание таблиц:
