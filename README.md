@@ -113,3 +113,13 @@ CREATE TABLE message (
     FOREIGN KEY (channelID) REFERENCES channel(id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 </pre>
+
+
+# Использование
+
+Для использование прокраммы необходимо установить в переменные окружения DBPASS и DBUSER пароль и логин для подключния с БД MySQL.
+
+```bash
+export DBUSER=user_name
+export DBPASS=user_pass
+```
