@@ -73,8 +73,8 @@ func (api APIService) AddNewChannel(w http.ResponseWriter, r *http.Request) {
 		sendError(err, w, r)
 		return
 	}
-	api.sseAddChannel(id.String())
 	sendChannel(newChannel, w, r)
+	api.sseAddChannel(id.String())
 }
 
 // Удаление канала по id
@@ -87,9 +87,9 @@ func (api APIService) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 		sendError(err, w, r)
 		return
 	}
-	api.sseDeleteChannel(channelID)
 	w.WriteHeader(http.StatusOK)
 	w.Write(nil)
+	api.sseDeleteChannel(channelID)
 }
 
 // Возвращает канал по id канала
@@ -171,38 +171,42 @@ func (api APIService) MessageChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.sseUpdateChannel(channelID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsMessage)
+	api.sseUpdateChannel(channelID)
 }
 
 func (api *APIService) CreateSSE(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(": connected")
-	// Устанавливаем заголовки для SSE.
+	// Устанавливаем заголовки для SSE
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	api.workResponse(w, r)
+
+	// Создаем канал для отправки событий клиенту
+	//api.messageChannel = make(chan string)
+
+	// Бесконечный цикл, в котором мы слушаем события и отправляем их клиенту
+	event := api.messageChannel
 	for {
+		select {
+		case event, ok := <-event:
+			fmt.Println(": event")
+			if !ok {
+				fmt.Println(": !ok")
+				return
+			}
+			fmt.Fprint(w, event)
+			w.(http.Flusher).Flush()
+		case <-r.Context().Done():
+			fmt.Println(": Close")
+			return
+		}
 	}
 }
 
 /// Private
-
-func (api *APIService) workResponse(w http.ResponseWriter, r *http.Request) {
-	// Отправляем сообщения клиенту через SSE
-	go func() {
-		localW := w
-		fmt.Println("gorutine")
-		for {
-			message := <-api.messageChannel
-			fmt.Println(message)
-			fmt.Fprintf(localW, "data:%s\n", message)
-			localW.(http.Flusher).Flush()
-		}
-	}()
-}
 
 // Отправка события добавление канала
 func (api *APIService) sseAddChannel(id string) {
