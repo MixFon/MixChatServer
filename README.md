@@ -86,7 +86,7 @@ mysql> select * from message;
 # Empty set (0.00 sec)
 ```
 
-Файл описывающий создание таблиц:
+Файл **create-channels.sql** описывающий создание таблиц:
 
 <pre>
 -- Удаление таблицы message
