@@ -118,8 +118,21 @@ CREATE TABLE message (
 # Использование
 
 Для использование прокраммы необходимо установить в переменные окружения DBPASS и DBUSER пароль и логин для подключния с БД MySQL.
-
 ```bash
 export DBUSER=user_name
 export DBPASS=user_pass
+```
+
+Запустить сервер MySQL
+```bash
+mysql.server start
+# Starting MySQL
+# . SUCCESS!
+```
+
+Запустить сервер
+```bash
+go run main.go
+# Database connected!
+# Start server!
 ```
